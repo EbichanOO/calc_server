@@ -1,28 +1,47 @@
-use std::io::prelude::*;
-use std::net::TcpStream;
-use std::net::TcpListener;
-use std::fs::File;
-fn main() {
-    let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
+use actix_web::{middleware, web, App, HttpRequest, HttpServer};
 
-    for stream in listener.incoming() {
-        let stream = stream.unwrap();
-
-        handle_connection(stream);
-    }
+async fn index(req: HttpRequest) -> &'static str {
+    println!("REQ: {:?}", req);
+    "Hello world!"
 }
 
-fn handle_connection(mut stream: TcpStream) {
-    let mut buffer = [0;1024];
-    stream.read(&mut buffer).unwrap();
+#[actix_web::main]
+async fn main() -> std::io::Result<()> {
+    std::env::set_var("RUST_LOG", "actix_web=info");
+    env_logger::init();
 
-    let mut file = File::open("hello.html").unwrap();
+    HttpServer::new(|| {
+        App::new()
+            // enable logger
+            .wrap(middleware::Logger::default())
+            .service(web::resource("/index.html").to(|| async { "Hello world!" }))
+            .service(web::resource("/").to(index))
+    })
+    .bind(("127.0.0.1", 8080))?
+    .run()
+    .await
+}
 
-    let mut contents = String::new();
-    file.read_to_string(&mut contents).unwrap();
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use actix_web::body::to_bytes;
+    use actix_web::dev::Service;
+    use actix_web::{http, test, web, App, Error};
 
-    let response = format!("HTTP/1.1 200 OK\r\n\r\n{}",contents);
-    
-    stream.write(response.as_bytes()).unwrap();
-    stream.flush().unwrap();
+    #[actix_web::test]
+    async fn test_index() -> Result<(), Error> {
+        let app = App::new().route("/", web::get().to(index));
+        let app = test::init_service(app).await;
+
+        let req = test::TestRequest::get().uri("/").to_request();
+        let resp = app.call(req).await.unwrap();
+
+        assert_eq!(resp.status(), http::StatusCode::OK);
+
+        let response_body = resp.into_body();
+        assert_eq!(to_bytes(response_body).await.unwrap(), r##"Hello world!"##);
+
+        Ok(())
+    }
 }
