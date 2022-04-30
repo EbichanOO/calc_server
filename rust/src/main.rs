@@ -1,5 +1,5 @@
 use std::cell::Cell;
-use std::io;
+use std::io::{self, Read};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
 
@@ -23,12 +23,7 @@ async fn index(
     counter_cell.set(counter_cell.get() + 1);
     counter_atomic.fetch_add(1, Ordering::SeqCst);
 
-    let body = format!(
-        "global mutex counter: {}, local counter: {}, global atomic counter: {}",
-        *counter_mutex.lock().unwrap(),
-        counter_cell.get(),
-        counter_atomic.load(Ordering::SeqCst),
-    );
+    let body = "Hello world!";
     HttpResponse::Ok().body(body)
 }
 
