@@ -1,20 +1,60 @@
-use actix_web::{middleware, web, App, HttpRequest, HttpServer};
+use std::cell::Cell;
+use std::io;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Mutex;
 
-async fn index(req: HttpRequest) -> &'static str {
-    println!("REQ: {:?}", req);
-    "Hello world!"
+use actix_web::{
+    middleware,
+    web::{self, Data},
+    App, HttpRequest, HttpResponse, HttpServer,
+};
+
+/// simple handle
+async fn index(
+    counter_mutex: Data<Mutex<usize>>,
+    counter_cell: Data<Cell<u32>>,
+    counter_atomic: Data<AtomicUsize>,
+    req: HttpRequest,
+) -> HttpResponse {
+    println!("{:?}", req);
+
+    // Increment the counters
+    *counter_mutex.lock().unwrap() += 1;
+    counter_cell.set(counter_cell.get() + 1);
+    counter_atomic.fetch_add(1, Ordering::SeqCst);
+
+    let body = format!(
+        "global mutex counter: {}, local counter: {}, global atomic counter: {}",
+        *counter_mutex.lock().unwrap(),
+        counter_cell.get(),
+        counter_atomic.load(Ordering::SeqCst),
+    );
+    HttpResponse::Ok().body(body)
 }
 
 #[actix_web::main]
-async fn main() -> std::io::Result<()> {
+async fn main() -> io::Result<()> {
     std::env::set_var("RUST_LOG", "actix_web=info");
     env_logger::init();
 
-    HttpServer::new(|| {
+    // Create some global state prior to building the server
+    #[allow(clippy::mutex_atomic)] // it's intentional.
+    let counter_mutex = Data::new(Mutex::new(0usize));
+    let counter_atomic = Data::new(AtomicUsize::new(0usize));
+
+    // move is necessary to give closure below ownership of counter1
+    HttpServer::new(move || {
+        // Create some thread-local state
+        let counter_cell = Cell::new(0u32);
+
         App::new()
+            .app_data(counter_mutex.clone()) // add shared state
+            .app_data(counter_atomic.clone()) // add shared state
+            .app_data(Data::new(counter_cell)) // add thread-local state
+            .route("/test", web::get().to(test_route))
             // enable logger
             .wrap(middleware::Logger::default())
-            .service(web::resource("/index.html").to(|| async { "Hello world!" }))
+            // register simple handler
             .service(web::resource("/").to(index))
     })
     .bind(("127.0.0.1", 8080))?
@@ -22,26 +62,13 @@ async fn main() -> std::io::Result<()> {
     .await
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use actix_web::body::to_bytes;
-    use actix_web::dev::Service;
-    use actix_web::{http, test, web, App, Error};
+async fn test_route(
+    req: HttpRequest,
+) -> HttpResponse {
+    println!("{:?}", req);
 
-    #[actix_web::test]
-    async fn test_index() -> Result<(), Error> {
-        let app = App::new().route("/", web::get().to(index));
-        let app = test::init_service(app).await;
-
-        let req = test::TestRequest::get().uri("/").to_request();
-        let resp = app.call(req).await.unwrap();
-
-        assert_eq!(resp.status(), http::StatusCode::OK);
-
-        let response_body = resp.into_body();
-        assert_eq!(to_bytes(response_body).await.unwrap(), r##"Hello world!"##);
-
-        Ok(())
-    }
+    let body = format!(
+        "Hello, from test!"
+    );
+    HttpResponse::Ok().body(body)
 }
