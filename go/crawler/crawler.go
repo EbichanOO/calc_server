@@ -4,12 +4,40 @@ import (
 	"fmt"
 	"net/http"
 	"time"
+	"sort"
 	"regexp"
 	"github.com/PuerkitoBio/goquery"
 
 	"database/sql"
 	_"github.com/mattn/go-sqlite3"
 )
+
+func intListDiff(listA []int, listB []int) ([]int) {
+	largeList := listA
+	smallList := listB
+	if len(largeList) < len(smallList) {
+		tmp := largeList
+		largeList = smallList
+		smallList = tmp
+	}
+
+	// ソートして調べる
+	sort.Slice(largeList,func(i, j int) bool { return largeList[i] < largeList[j] })
+	sort.Slice(smallList,func(i, j int) bool { return smallList[i] < smallList[j] })
+	var diffList []int
+	beforePointer := 0
+	for i,_ := range smallList {
+		for j := beforePointer+1; j < len(largeList); j++ {
+			if smallList[i] == largeList[j] {
+				diffList = append(diffList,largeList[beforePointer+1:j]...)
+				beforePointer = j
+				break
+			}
+		}
+	}
+	diffList = append(diffList,largeList[beforePointer+1:]...)
+	return diffList
+}
 
 // <---- modeling ---->
 const (
@@ -70,6 +98,28 @@ func getAllWordInArticle() (string, error) {
 	return "", err
 }
 
+func getArticleIDs(data *db_data) (error) {
+	db, err := sql.Open("sqlite3", db_path+db_name)
+	if err != nil {
+		return err
+	}
+	res, err := db.Query(
+		`select article_id from article_words where word_id=?`,
+		data.id,
+	)
+	if err != nil {
+		return err
+	}
+	for res.Next() {
+		var article_id int
+		if err := res.Scan(&article_id);err!=nil {
+			return err
+		}
+		data.articleIDs = append(data.articleIDs, article_id)
+	}
+	return nil
+}
+
 func insertNewWord(data *db_data) (error){
 	db, err := sql.Open("sqlite3", db_path+db_name)
 	if err != nil {
@@ -105,16 +155,23 @@ func updateArticleID(data *db_data) (error){
 		`SELECT * FROM words WHERE word=?`,
 		data.word,
 	)
-	var word_id int
-	err = res.Scan(&word_id)
+
+	err = res.Scan(&data.id)
+	if err!=nil {
+		return err
+	}
+	storeStruct := data
+
+	err = getArticleIDs(storeStruct)
 	if err!=nil {
 		return err
 	}
 
+
 	_, err = db.Exec(
 		`insert article_words (word_id,article_id) value (?,?)`,
-		data.articleIDs[-1],
-		word_id,
+		data.articleIDs[len(data.articleIDs)-1],
+		data.id,
 	)
 	if err != nil {
 		return err
@@ -174,11 +231,17 @@ func main() {
 	if err := DBinit(); err!=nil {
 		panic(err)
 	}
-	a_d := db_data{word:"hoge",articleIDs:[0]}
+	a := [] int{1,2,3}
+	b := [] int{1,2,5}
+	b = intListDiff(a, b)
+	fmt.Println(b)
+
+	a_d := db_data{word:"hoge"}
+	a_d.articleIDs = append(a_d.articleIDs, 0)
 	if err := insertNewWord(&a_d);err!=nil {
 		panic(err)
 	}
-	a_d = db_data{word:"hoge",articleIDs:[0,1]}
+	a_d.articleIDs = append(a_d.articleIDs, 1)
 	if err := updateArticleID(&a_d);err!=nil {
 		panic(err)
 	}
