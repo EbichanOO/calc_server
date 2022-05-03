@@ -12,7 +12,7 @@ import (
 	_"github.com/mattn/go-sqlite3"
 )
 
-func intListDiff(listA []int, listB []int) ([]int) {
+func getIntListDiff(listA []int, listB []int) ([]int) {
 	largeList := listA
 	smallList := listB
 	if len(largeList) < len(smallList) {
@@ -24,18 +24,21 @@ func intListDiff(listA []int, listB []int) ([]int) {
 	// ソートして調べる
 	sort.Slice(largeList,func(i, j int) bool { return largeList[i] < largeList[j] })
 	sort.Slice(smallList,func(i, j int) bool { return smallList[i] < smallList[j] })
-	var diffList []int
-	beforePointer := 0
-	for i,_ := range smallList {
-		for j := beforePointer+1; j < len(largeList); j++ {
-			if smallList[i] == largeList[j] {
-				diffList = append(diffList,largeList[beforePointer+1:j]...)
-				beforePointer = j
+	isSameList := make([]bool, len(largeList)) // init all false
+	for i,_ := range largeList {
+		for j := 0; j < len(smallList); j++ {
+			if smallList[j] == largeList[i] {
+				isSameList[i] = true
 				break
 			}
 		}
 	}
-	diffList = append(diffList,largeList[beforePointer+1:]...)
+	var diffList []int
+	for i,isSame := range isSameList {
+		if !isSame {
+			diffList = append(diffList, largeList[i])
+		}
+	}
 	return diffList
 }
 
@@ -93,7 +96,7 @@ func getAllWordInArticle() (string, error) {
 		if err := res.Scan(&word_id, &article_id);err!=nil {
 			return "",err
 		}
-		fmt.Printf("word_id:%d, article_id:%s\n", word_id,article_id)
+		fmt.Printf("word_id:%d, article_id:%d\n", word_id,article_id)
 	}
 	return "", err
 }
@@ -231,11 +234,7 @@ func main() {
 	if err := DBinit(); err!=nil {
 		panic(err)
 	}
-	a := [] int{1,2,3}
-	b := [] int{1,2,5}
-	b = intListDiff(a, b)
-	fmt.Println(b)
-
+	
 	a_d := db_data{word:"hoge"}
 	a_d.articleIDs = append(a_d.articleIDs, 0)
 	if err := insertNewWord(&a_d);err!=nil {
