@@ -6,10 +6,12 @@ import (
 	"time"
 	"sort"
 	"regexp"
+	"strings"
 	"github.com/PuerkitoBio/goquery"
 
 	"database/sql"
 	"github.com/jinzhu/copier"
+	"github.com/bluele/mecab-golang"
 	_"github.com/mattn/go-sqlite3"
 )
 
@@ -238,26 +240,66 @@ func get_a_article(url string)string {
 	doc.Find("p").Each(func(i int, s *goquery.Selection) {
 		// For each item found, get the title
 		rawText := s.Text()
-		if !regexp.MustCompile("[0-9]+年").MatchString(rawText) {
-			re := regexp.MustCompile("[[0-9]+]")
-			context := re.ReplaceAllString(rawText, "")
-			re = regexp.MustCompile("\n")
-			context = re.ReplaceAllString(context, "")
-			retrunText += context
-		}
+		
+		re := regexp.MustCompile("[[0-9]+]")
+		context := re.ReplaceAllString(rawText, "")
+		re = regexp.MustCompile("[0-9]+年")
+		context = re.ReplaceAllString(context, "")
+		re = regexp.MustCompile("\n")
+		context = re.ReplaceAllString(context, "")
+		retrunText += context
 	})
 	return retrunText
 }
 
-func scrape() {
+func scrape() string {
 	urlList := [2]string{
 		"https://ja.wikipedia.org/wiki/%E6%9C%88%E3%83%8E%E7%BE%8E%E5%85%8E", //月ノ美兎
 		"https://ja.wikipedia.org/wiki/%E5%90%8D%E5%8F%96%E3%81%95%E3%81%AA", //名取さな
 	}
 
 	for i := range urlList {
-		fmt.Printf("%s : %s\n", urlList[i], get_a_article(urlList[i]))
+		return get_a_article(urlList[i])
 	}
+	return ""
+}
+
+//<---- word controller ---->
+func splitArticleToSentence(article string) []string {
+	return strings.Split(article,"。")
+}
+
+func splitSentenceToArticle(sentence string) ([]string, error) {
+	m,err := mecab.New("-Owakati")
+	if err != nil {
+		return nil,err
+	}
+	defer m.Destroy()
+
+	tg, err := m.NewTagger()
+	if err != nil {
+		return nil,err
+	}
+	defer tag.Destroy()
+
+	lt, err := m.NewLattice(sentence)
+	if err != nil {
+		return nil,err
+	}
+	defer lt.Destroy()
+
+	wordList := []string
+	node := tg.ParseToNode(lt)
+	for {
+		features := strings.Split(node.Feature(),",")
+		if features[0] != "BOS/EOS" {
+			fmt.Printf("%s %s\n",node.Surface(), node.Feature())
+		}
+		if node.Next() != nil {
+			break
+		}
+	}
+	return wordList
 }
 
 func main() {
@@ -267,7 +309,9 @@ func main() {
 
 	fmt.Printf("get ready!\n")
 	for {
-		scrape()
+		for _,list := range splitSentenceToArticle(splitArticleToSentence(scrape())[0]) {
+			fmt.Println(list)
+		}
 		fmt.Printf("the end!\n")
 		time.Sleep(1*time.Hour)
 	}
