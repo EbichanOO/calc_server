@@ -276,7 +276,7 @@ func splitSentenceToArticle(sentence string) ([]string, error) {
 	}
 	defer m.Destroy()
 
-	tg, err := m.NewTagger()
+	tag, err := m.NewTagger()
 	if err != nil {
 		return nil,err
 	}
@@ -288,18 +288,18 @@ func splitSentenceToArticle(sentence string) ([]string, error) {
 	}
 	defer lt.Destroy()
 
-	wordList := []string
-	node := tg.ParseToNode(lt)
+	var wordList []string
+	node := tag.ParseToNode(lt)
 	for {
 		features := strings.Split(node.Feature(),",")
 		if features[0] != "BOS/EOS" {
-			fmt.Printf("%s %s\n",node.Surface(), node.Feature())
+			wordList = append(wordList,node.Surface())
 		}
 		if node.Next() != nil {
 			break
 		}
 	}
-	return wordList
+	return wordList, nil
 }
 
 func main() {
@@ -309,7 +309,8 @@ func main() {
 
 	fmt.Printf("get ready!\n")
 	for {
-		for _,list := range splitSentenceToArticle(splitArticleToSentence(scrape())[0]) {
+		V,_ := splitSentenceToArticle(splitArticleToSentence(scrape())[0])
+		for _,list := range V {
 			fmt.Println(list)
 		}
 		fmt.Printf("the end!\n")

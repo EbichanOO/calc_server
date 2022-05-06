@@ -1,3 +1,4 @@
+# docker run --rm -it pipo bash
 FROM golang:latest
 
 ENV TZ Asia/Tokyo
@@ -12,8 +13,8 @@ RUN apt update -y &&\
         libmecab-dev \
         mecab-ipadic-utf8
 
-ENV CGO_LDFLAGS="`/usr/bin/mecab-config --libs`"
-ENV CGO_CFLAGS="-I`/usr/bin/mecab-config --inc-dir`"
+ENV CGO_LDFLAGS="-L/usr/lib/x86_64-linux-gnu -lmecab -lstdc++"
+ENV CGO_CFLAGS="-I/usr/include"
 
 COPY . /go/src/calc_server/
 WORKDIR /go/src/calc_server/go/crawler/
